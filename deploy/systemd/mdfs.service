@@ -1,0 +1,21 @@
+[Unit]
+Description=MDFS HTTP File Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mdfs
+Group=mdfs
+ExecStart=/opt/mdfs/bin/mdfs --config /etc/mdfs/mdfs.toml
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/mdfs
+
+[Install]
+WantedBy=multi-user.target
+

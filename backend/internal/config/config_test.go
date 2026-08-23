@@ -34,7 +34,7 @@ func TestLoadRejectsInvalidConfigs(t *testing.T) {
 		{name: "invalid TOML", content: "[server", want: "parse TOML"},
 		{name: "missing listen", content: "[share]\npath = \"" + shared + "\"", want: "server.listen"},
 		{name: "invalid listen", content: "[server]\nlisten = \"8080\"\n[share]\npath = \"" + shared + "\"", want: "server.listen"},
-		{name: "missing share", content: "[server]\nlisten = \"127.0.0.1:8080\"", want: "share.path"},
+		{name: "missing share", content: "[server]\nlisten = \"127.0.0.1:8080\"", want: "at least one share"},
 	}
 
 	for _, tt := range tests {
@@ -48,5 +48,21 @@ func TestLoadRejectsInvalidConfigs(t *testing.T) {
 				t.Fatalf("Load() error = %v, want containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadMultipleSharesAndDefaults(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	filename := filepath.Join(t.TempDir(), "mdfs.toml")
+	content := "[server]\nlisten=\"127.0.0.1:8080\"\n[[shares]]\nname=\"one\"\npath=\"" + first + "\"\n[[shares]]\nname=\"two\"\npath=\"" + second + "\"\n"
+	if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Shares) != 2 || !*cfg.WebDAV.Enabled || cfg.Features.MaxSearchResults != DefaultSearchResults {
+		t.Fatalf("defaults = %#v", cfg)
 	}
 }

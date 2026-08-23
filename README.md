@@ -1,37 +1,22 @@
 # MDFS
 
-MDFS 是一个轻量、只读的 HTTP 文件服务器。它使用 Go 提供安全的目录浏览与文件下载 API，并将 Vue 3 页面嵌入单个可执行文件。
+MDFS 是一个使用 Go、Vue 3 和 Vite 实现的轻量文件服务器。它提供 CHFS 3.1 风格的网页文件管理、R/W/D 路径权限、多共享目录、WebDAV、TLS、IP 访问控制和操作日志，并可将前端嵌入单个可执行文件。
 
 ## 功能
 
-- 浏览共享根目录及其子目录
-- 显示文件大小和修改时间
-- 直接下载文件
-- 阻止目录越界和符号链接逃逸
-- 使用 TOML 配置监听地址和共享目录
-- 构建包含 Vue 页面的单个 Linux 可执行文件
+- 目录浏览、本页/全局搜索、排序和哈希路径导航
+- 文件预览、Range 下载、二维码、目录 ZIP 下载
+- 文件/目录上传、拖拽与上传进度
+- 新建目录/文本、在线文本编辑、重命名和删除
+- 简体中文、繁体中文和英文界面
+- 匿名及多用户 R/W/D 权限，支持 `*` 和 `**` 路径规则
+- 单目录或多目录虚拟根
+- 与网页权限一致的 `/webdav` 服务
+- 可选 TLS、IP allow/deny、可信代理和 JSONL 操作日志
 
-## 环境要求
+## 开发运行
 
-- Go 1.25+
-- Node.js 22+ 和 npm 10+
-- GoReleaser 2+
-- Bash 和 Make（执行发布构建时）
-- 已有至少一次提交和 remote 的 Git 仓库（GoReleaser 读取版本信息所需）
-
-## 快速开始
-
-先创建或修改一个配置文件，确保 `share.path` 指向已存在的目录：
-
-```toml
-[server]
-listen = "0.0.0.0:8080"
-
-[share]
-path = "/srv/mdfs"
-```
-
-分别启动后端和前端开发服务器：
+要求 Go 1.25+、Node.js 22+、npm 10+。
 
 ```bash
 cd frontend && npm install
@@ -39,76 +24,109 @@ make dev-api
 make dev-web
 ```
 
-浏览器访问 `http://localhost:5173`。Vite 会将 `/api` 请求代理到 `http://127.0.0.1:8080`。
+访问 `http://localhost:5173`。Vite 将 `/api` 和 `/webdav` 代理到 `http://127.0.0.1:8080`。
 
-## 构建发布包
+`make dev-api` 默认读取 `configs/mdfs.dev.toml`，共享项目的 `shared/` 测试目录。开发配置允许匿名 RWD，另提供 `admin/admin` 登录账号；请勿将该配置用于生产。
+
+## 配置
+
+程序只接受 `--config`：
 
 ```bash
+cd backend
+go run ./cmd/mdfs --config ../configs/mdfs.dev.toml
+```
+
+核心配置示例：
+
+```toml
+[server]
+listen = "0.0.0.0:8080"
+public_url = ""
+session_timeout = "60m"
+
+[[shares]]
+name = "public"
+path = "/srv/public"
+
+[anonymous]
+permissions = "R"
+
+[[users]]
+name = "admin"
+password = "replace-this-password"
+permissions = "RWD"
+
+[[users.rules]]
+pattern = "/private/**"
+permissions = ""
+
+[webdav]
+enabled = true
+prefix = "/webdav"
+```
+
+`R` 表示浏览/搜索/下载，`W` 表示上传/新建/编辑/重命名，`D` 表示删除。最具体的路径规则覆盖用户默认权限。`*` 匹配单个目录段，`**` 匹配任意深度。
+
+配置中的密码为明文。生产环境必须限制配置文件权限：
+
+```bash
+chmod 600 /etc/mdfs/mdfs.toml
+```
+
+一个旧式 `[share] path = "..."` 仍可作为单共享目录配置；新增部署建议使用 `[[shares]]`。多个 share 时，网页和 WebDAV 根目录为只读虚拟根。
+
+### TLS
+
+同时配置证书和私钥后，服务直接启用 HTTPS：
+
+```toml
+[server.tls]
+cert_file = "/etc/mdfs/tls/cert.pem"
+key_file = "/etc/mdfs/tls/key.pem"
+```
+
+### IP 控制与日志
+
+```toml
+[access]
+allow = ["192.168.0.0/16", "10.0.0.5-10.0.0.20"]
+deny = ["192.168.1.100"]
+trusted_proxies = ["127.0.0.1"]
+
+[logging]
+directory = "/var/log/mdfs"
+```
+
+deny 优先于 allow。只有可信代理地址才会触发 `X-Forwarded-For` 解析。日志目录非空时按日期生成 JSONL 文件，且不会记录密码或文件内容。
+
+## REST API
+
+主要接口位于 `/api/v1`：
+
+- `GET /meta`、`GET|POST|DELETE /session`
+- `GET /files`、`GET /search`、`GET /content`、`GET /archive`
+- `POST /uploads`、`POST /directories`
+- `POST|PUT /text-files`
+- `PATCH|DELETE /files`
+
+错误响应格式为 `{"error":{"code":"...","message":"..."}}`。
+
+## 测试与构建
+
+```bash
+make test
+make prepare-web
 make build
 ```
 
-默认生成：
+`make test` 运行 Go 测试、Vitest、Vue 类型检查和前端生产构建。`make prepare-web` 将 Vite 构建复制到 Go 嵌入目录。`make build` 使用 GoReleaser 生成 Linux amd64/arm64 snapshot 包、配置和 systemd unit。
 
-```text
-dist/
-├── mdfs_0.0.0-snapshot_linux_amd64.tar.gz
-├── mdfs_0.0.0-snapshot_linux_arm64.tar.gz
-└── checksums.txt
-```
+发布包中的 systemd 默认使用：
 
-每个压缩包都包含：
+- 程序 `/opt/mdfs/bin/mdfs`
+- 配置 `/etc/mdfs/mdfs.toml`
+- 用户/组 `mdfs`
+- 共享目录 `/srv/mdfs`
 
-```text
-mdfs_0.0.0-snapshot_linux_<架构>/
-├── mdfs
-├── README.md
-├── config/mdfs.toml
-└── systemd/mdfs.service
-```
-
-`make build` 生成本地 snapshot，不会发布。GoReleaser 使用 Git 信息生成构建元数据。
-
-## 运行
-
-```bash
-tar -xzf dist/mdfs_0.0.0-snapshot_linux_amd64.tar.gz
-cd dist/mdfs_0.0.0-snapshot_linux_amd64
-./mdfs --config ./config/mdfs.toml
-```
-
-程序只接受 `--config` 参数。配置文件不存在、格式错误或共享目录不可用时会直接退出。
-
-## systemd
-
-发布包中的 unit 文件使用以下默认路径：
-
-- 程序：`/opt/mdfs/bin/mdfs`
-- 配置：`/etc/mdfs/mdfs.toml`
-- 运行用户和组：`mdfs`
-- 只读共享目录：`/srv/mdfs`
-
-安装前需要自行创建用户、复制文件并确保 `mdfs` 用户能够读取共享目录。
-
-## 开发命令
-
-| 命令 | 用途 |
-|---|---|
-| `make dev-api` | 启动 Go API |
-| `make dev-web` | 启动 Vite 开发服务器 |
-| `make test` | 运行 Go 测试和 Vue 类型检查 |
-| `make prepare-web` | 构建并复制 Vue 静态资源 |
-| `make build` | 使用 GoReleaser 生成本地 snapshot 发布包 |
-| `make clean` | 删除构建产物 |
-
-## 项目结构
-
-```text
-backend/   Go 服务、API、文件访问和嵌入式前端
-frontend/  Vue 3 + TypeScript + Vite 页面
-configs/   TOML 示例配置
-deploy/    systemd 部署模板
-scripts/   前端静态资源准备脚本
-dist/      GoReleaser 本地发布产物
-```
-
-当前版本不包含上传、用户权限、WebDAV、HTTPS或自动安装脚本。
+生产部署前请创建低权限运行用户，并确保它只拥有共享目录所需的文件系统权限。

@@ -1,6 +1,6 @@
 .PHONY: build prepare-web dev-api dev-web test clean
 
-CONFIG ?= ../configs/mdfs.toml
+CONFIG ?= ../configs/mdfs.dev.toml
 GOCACHE ?= $(CURDIR)/.cache/go-build
 export GOCACHE
 
@@ -19,7 +19,9 @@ dev-web:
 
 test:
 	cd backend && go test ./...
+	cd frontend && npm test
 	cd frontend && npm run typecheck
+	cd frontend && npm run build
 
 clean:
 	rm -rf dist frontend/dist backend/internal/webui/dist

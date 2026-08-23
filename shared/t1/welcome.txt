@@ -1,0 +1,3 @@
+Welcome to MDFS.
+
+This directory is used for local file browsing and download tests.

@@ -1,23 +1,19 @@
 [server]
-listen = "0.0.0.0:8080"
+listen = "127.0.0.1:8080"
 public_url = ""
 session_timeout = "60m"
 
-[server.tls]
-cert_file = ""
-key_file = ""
-
 [[shares]]
 name = "shared"
-path = "/srv/mdfs"
+path = "../shared"
 
 [anonymous]
-permissions = "R"
+permissions = "RWD"
 
-[access]
-allow = []
-deny = []
-trusted_proxies = []
+[[users]]
+name = "admin"
+password = "admin"
+permissions = "RWD"
 
 [webdav]
 enabled = true
@@ -25,13 +21,12 @@ prefix = "/webdav"
 
 [ui]
 title = "MDFS"
-notice = ""
+notice = "开发环境：匿名用户拥有读写删除权限"
 default_language = "zh-CN"
 
 [features]
 max_upload_bytes = 1000000000000
 max_search_results = 1000
-leaf_directory_download_only = false
 image_preview = true
 
 [logging]

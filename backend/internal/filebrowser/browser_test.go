@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -59,5 +60,32 @@ func TestRejectsTraversalAndEscapingSymlink(t *testing.T) {
 		if _, _, err := browser.resolve(candidate); !errors.Is(err, ErrInvalidPath) {
 			t.Errorf("resolve(%q) error = %v, want ErrInvalidPath", candidate, err)
 		}
+	}
+}
+
+func TestMultipleSharesAndMutations(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	browser, err := NewShares([]Share{{Name: "one", Path: first}, {Name: "two", Path: second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listing, err := browser.List("/")
+	if err != nil || !listing.VirtualRoot || len(listing.Entries) != 2 {
+		t.Fatalf("listing = %#v, %v", listing, err)
+	}
+	if err := browser.CreateDir("/one/docs"); err != nil {
+		t.Fatal(err)
+	}
+	if err := browser.WriteFile("/one/docs/a.txt", strings.NewReader("hello"), true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := browser.Rename("/one/docs/a.txt", "b.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := browser.Delete("/one/docs/b.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(first, "docs", "b.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("file still exists: %v", err)
 	}
 }

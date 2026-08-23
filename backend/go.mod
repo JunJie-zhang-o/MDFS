@@ -1,5 +1,7 @@
 module mdfs
 
-go 1.25
+go 1.25.0
 
 require github.com/pelletier/go-toml/v2 v2.2.4
+
+require golang.org/x/net v0.58.0

@@ -19,7 +19,6 @@ const props = defineProps<{
   content: string
   fileName: string
   currentPath: string
-  loading?: boolean
 }>()
 
 function resolveRelativePath(baseDir: string, relativePath: string): string {
@@ -128,14 +127,7 @@ const renderedHtml = computed(() => {
       <span class="markdown-header-title">{{ fileName }}</span>
     </header>
     <div class="markdown-card-body">
-      <div v-if="loading" class="markdown-state-loading">
-        <span class="spinner" />
-        <span>加载中...</span>
-      </div>
-      <article v-else-if="renderedHtml" class="markdown-body" v-html="renderedHtml" />
-      <div v-else class="markdown-empty">
-        <p>（空文件）</p>
-      </div>
+      <article class="markdown-body" v-html="renderedHtml" />
     </div>
   </section>
 </template>
@@ -180,24 +172,6 @@ const renderedHtml = computed(() => {
   line-height: 1.6;
   background-color: transparent !important;
   color: var(--color-text-main, #0f172a);
-}
-
-.markdown-state-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 24px 0;
-  color: var(--color-text-muted, #64748b);
-  font-size: 13px;
-}
-
-.markdown-empty {
-  color: var(--color-text-muted, #64748b);
-  font-size: 13px;
-  font-style: italic;
-  padding: 12px 0;
-  text-align: center;
 }
 
 /* 适配移动端内边距 */

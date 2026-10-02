@@ -90,32 +90,4 @@ describe('MarkdownViewer.vue', () => {
       expect(img.attributes('onerror')).toBeUndefined()
     }
   })
-
-  it('renders loading state when loading is true', () => {
-    const wrapper = mount(MarkdownViewer, {
-      props: {
-        fileName: 'README.md',
-        content: '',
-        currentPath: '/',
-        loading: true,
-      },
-    })
-
-    expect(wrapper.find('.markdown-state-loading').exists()).toBe(true)
-    expect(wrapper.text()).toContain('加载中')
-  })
-
-  it('renders empty file notice when content is empty', () => {
-    const wrapper = mount(MarkdownViewer, {
-      props: {
-        fileName: 'README.md',
-        content: '',
-        currentPath: '/',
-        loading: false,
-      },
-    })
-
-    expect(wrapper.find('.markdown-empty').exists()).toBe(true)
-    expect(wrapper.text()).toContain('空文件')
-  })
 })

@@ -41,6 +41,7 @@ const query = ref('')
 const globalEntries = ref<FileEntry[] | null>(null)
 const readmeFileName = ref('')
 const readmeContent = ref('')
+const readmeLoading = ref(false)
 const searchTruncated = ref(false)
 const searchMenuOpen = ref(false)
 const languageMenuOpen = ref(false)
@@ -121,6 +122,7 @@ function joinPath(parent: string, name: string): string {
 async function loadReadme() {
   readmeFileName.value = ''
   readmeContent.value = ''
+  readmeLoading.value = false
   if (listing.value.virtualRoot || !listing.value.permissions.read) {
     return
   }
@@ -138,13 +140,15 @@ async function loadReadme() {
   }
 
   if (matchedEntry && matchedEntry.permissions.read) {
+    readmeFileName.value = matchedEntry.name
     try {
+      readmeLoading.value = true
       const content = await readText(matchedEntry.path)
-      readmeFileName.value = matchedEntry.name
       readmeContent.value = content
     } catch {
-      readmeFileName.value = ''
       readmeContent.value = ''
+    } finally {
+      readmeLoading.value = false
     }
   }
 }
@@ -348,8 +352,10 @@ onMounted(async () => {
     document.title = meta.value.title
     if (!getStorage('mdfs-language')) setLanguage(meta.value.defaultLanguage)
   } catch (reason) { showError(reason) }
-  if (!window.location.hash) window.location.hash = '#/'
-  else await load()
+  if (!window.location.hash) {
+    window.location.hash = '#/'
+  }
+  await load()
 })
 
 onUnmounted(() => {
@@ -554,9 +560,10 @@ onUnmounted(() => {
 
     <!-- 4.5 Markdown 预览卡片 (类似 GitHub 渲染) -->
     <MarkdownViewer
-      v-if="readmeContent && !globalEntries"
+      v-if="readmeFileName && !globalEntries"
       :content="readmeContent"
       :file-name="readmeFileName"
+      :loading="readmeLoading"
       :current-path="listing.path"
     />
 

@@ -53,11 +53,28 @@ const displayedEntries = computed(() => {
     ? source.filter((entry) => entry.name.toLocaleLowerCase().includes(query.value.toLocaleLowerCase()))
     : source
   return [...filtered].sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
     let result = 0
-    if (sortKey.value === 'name') result = left.name.localeCompare(right.name, language.value, { sensitivity: 'base' })
-    else if (sortKey.value === 'size') result = left.size - right.size
-    else result = new Date(left.modifiedAt).getTime() - new Date(right.modifiedAt).getTime()
+    if (sortKey.value === 'name') {
+      if (left.kind !== right.kind) {
+        const dirOrder = left.kind === 'directory' ? -1 : 1
+        return sortDirection.value === 'asc' ? dirOrder : -dirOrder
+      }
+      result = left.name.localeCompare(right.name, language.value, { numeric: true, sensitivity: 'base' })
+    } else if (sortKey.value === 'size') {
+      const leftSize = left.kind === 'directory' ? -1 : left.size
+      const rightSize = right.kind === 'directory' ? -1 : right.size
+      result = leftSize - rightSize
+      if (result === 0) {
+        result = left.name.localeCompare(right.name, language.value, { numeric: true, sensitivity: 'base' })
+      }
+    } else if (sortKey.value === 'modifiedAt') {
+      const leftTime = new Date(left.modifiedAt).getTime() || 0
+      const rightTime = new Date(right.modifiedAt).getTime() || 0
+      result = leftTime - rightTime
+      if (result === 0) {
+        result = left.name.localeCompare(right.name, language.value, { numeric: true, sensitivity: 'base' })
+      }
+    }
     return sortDirection.value === 'asc' ? result : -result
   })
 })
@@ -136,8 +153,12 @@ function setLanguage(value: Language) {
 }
 
 function changeSort(key: SortKey) {
-  if (sortKey.value === key) sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
-  else { sortKey.value = key; sortDirection.value = 'asc' }
+  if (sortKey.value === key) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDirection.value = key === 'modifiedAt' ? 'desc' : 'asc'
+  }
 }
 
 function openAction(action: FileAction, entry: FileEntry) {
@@ -257,10 +278,18 @@ function closeDialog() {
   dialog.value = null
 }
 
+function onDocumentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  if (!target.closest('.language-picker')) languageMenuOpen.value = false
+  if (!target.closest('.search-mode-selector')) searchMenuOpen.value = false
+}
+
 const onHashChange = () => { void load() }
 
 onMounted(async () => {
   window.addEventListener('hashchange', onHashChange)
+  document.addEventListener('click', onDocumentClick)
   try {
     meta.value = await getMeta()
     document.title = meta.value.title
@@ -270,47 +299,230 @@ onMounted(async () => {
   else await load()
 })
 
-onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
+onUnmounted(() => {
+  window.removeEventListener('hashchange', onHashChange)
+  document.removeEventListener('click', onDocumentClick)
+})
 </script>
 
 <template>
   <main id="maincontainer" class="container" @dragenter.prevent="dragActive = true" @dragover.prevent @dragleave.self="dragActive = false" @drop.prevent="onDrop">
     <div v-if="dragActive" class="drop-overlay">{{ t('dragHere') }}</div>
-    <section class="toolbar">
-      <button v-if="listing.permissions.write" type="button" class="btn default" @click="fileInput?.click()">{{ t('uploadFiles') }}</button>
-      <button v-if="listing.permissions.write && meta.features.directoryUpload" type="button" class="btn default" @click="folderInput?.click()">{{ t('uploadFolder') }}</button>
-      <button v-if="listing.permissions.write" type="button" class="btn default" @click="textTitle = ''; textContent = ''; dialog = 'newText'">{{ t('newText') }}</button>
-      <button v-if="listing.permissions.write" type="button" class="btn default" @click="folderName = ''; dialog = 'folder'">{{ t('newFolder') }}</button>
-      <input ref="fileInput" class="hidden-input" type="file" multiple @change="onFiles" />
-      <input ref="folderInput" class="hidden-input" type="file" multiple webkitdirectory @change="onFiles" />
-      <div v-if="listing.permissions.read" class="search-group">
-        <input v-model="query" type="search" :placeholder="`${searchMode === 'local' ? t('localSearch') : t('globalSearch')}...`" @keyup.enter="runGlobalSearch" />
-        <button v-if="searchMode === 'global'" type="button" class="btn default search-submit" @click="runGlobalSearch">⌕</button>
-        <button type="button" class="btn default search-menu-button" @click="searchMenuOpen = !searchMenuOpen">⌄</button>
-        <div v-if="searchMenuOpen" class="dropdown search-dropdown">
-          <button type="button" @click="setSearchMode('local')">{{ t('localSearch') }}</button>
-          <button type="button" @click="setSearchMode('global')">{{ t('globalSearch') }}</button>
+
+    <!-- 1. 最上方标题栏 (Top Header Bar) -->
+    <header class="top-header">
+      <div class="header-left">
+        <h1 class="header-title">{{ meta.title || t('fileManagement') }}</h1>
+        <p class="header-subtitle">{{ meta.notice || t('defaultNotice') }}</p>
+      </div>
+
+      <!-- 右上角：用户登录按钮 -->
+      <div class="header-right">
+        <button
+          type="button"
+          class="user-btn"
+          @click="dialog = session.authenticated ? 'logout' : 'login'"
+        >
+          <svg class="user-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>{{ session.authenticated ? session.user : t('login') }}</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 错误警告提示 -->
+    <div v-if="error" class="alert">
+      <div class="alert-content">
+        <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <span>{{ error }}</span>
+      </div>
+      <button type="button" class="alert-close" @click="error = ''">×</button>
+    </div>
+
+    <!-- 2. 面包屑导航卡片 -->
+    <Breadcrumbs
+      :path="listing.path"
+      :root-label="t('root')"
+      :back-label="t('parentDir')"
+      :search-label="globalEntries ? `${t('searchResults')} “${query}”` : ''"
+      @navigate="navigate"
+    />
+
+    <p v-if="searchTruncated" class="search-warning">{{ t('tooMany') }}</p>
+
+    <!-- 3. 搜索与操作按钮栏 (Toolbar Row) -->
+    <section class="toolbar-row">
+      <!-- 搜索区 -->
+      <div v-if="listing.permissions.read" class="search-wrap">
+        <div class="search-input-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            v-model="query"
+            type="search"
+            :placeholder="t('searchPlaceholder')"
+            @keyup.enter="runGlobalSearch"
+          />
+          <button
+            v-if="searchMode === 'global'"
+            type="button"
+            class="search-mode-submit"
+            title="执行搜索"
+            @click="runGlobalSearch"
+          >
+            ⌕
+          </button>
+          <div class="search-mode-selector">
+            <button
+              type="button"
+              class="search-mode-btn"
+              :title="searchMode === 'local' ? t('localSearch') : t('globalSearch')"
+              @click.stop="searchMenuOpen = !searchMenuOpen"
+            >
+              <span>{{ searchMode === 'local' ? '当前' : '全局' }}</span>
+              <svg class="chevron-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+            <div v-if="searchMenuOpen" class="dropdown search-dropdown">
+              <button type="button" :class="{ active: searchMode === 'local' }" @click="setSearchMode('local')">
+                {{ t('localSearch') }}
+              </button>
+              <button type="button" :class="{ active: searchMode === 'global' }" @click="setSearchMode('global')">
+                {{ t('globalSearch') }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-      <button type="button" class="btn default user-button" @click="dialog = session.authenticated ? 'logout' : 'login'">{{ session.authenticated ? session.user : t('login') }}</button>
+
+      <!-- 操作按钮组：刷新放置在上传文件左侧 -->
+      <div class="action-buttons-group">
+        <!-- 刷新列表按钮 (放到上传文件左侧) -->
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="loading"
+          :title="t('refresh')"
+          @click="load(listing.path)"
+        >
+          <svg class="btn-icon" :class="{ 'animate-spin': loading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M3 21v-5h5" />
+          </svg>
+          <span>{{ t('refresh') }}</span>
+        </button>
+
+        <!-- 上传文件 (实心蓝底主按钮) -->
+        <button
+          v-if="listing.permissions.write"
+          type="button"
+          class="btn-primary"
+          @click="fileInput?.click()"
+        >
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>{{ t('uploadFiles') }}</span>
+        </button>
+
+        <!-- 上传目录 (若支持目录上传) -->
+        <button
+          v-if="listing.permissions.write && meta.features.directoryUpload"
+          type="button"
+          class="btn-secondary"
+          @click="folderInput?.click()"
+        >
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+            <path d="M12 12v9" />
+            <path d="m8 17 4 4 4-4" />
+          </svg>
+          <span>{{ t('uploadFolder') }}</span>
+        </button>
+
+        <!-- 新建文件夹 (轮廓白底次级按钮) -->
+        <button
+          v-if="listing.permissions.write"
+          type="button"
+          class="btn-secondary"
+          @click="folderName = ''; dialog = 'folder'"
+        >
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <line x1="9" y1="14" x2="15" y2="14" />
+          </svg>
+          <span>{{ t('newFolder') }}</span>
+        </button>
+
+        <!-- 新建文件 (轮廓白底次级按钮) -->
+        <button
+          v-if="listing.permissions.write"
+          type="button"
+          class="btn-secondary"
+          @click="textTitle = ''; textContent = ''; dialog = 'newText'"
+        >
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="18" x2="12" y2="12" />
+            <line x1="9" y1="15" x2="15" y2="15" />
+          </svg>
+          <span>{{ t('newFile') }}</span>
+        </button>
+
+        <input ref="fileInput" class="hidden-input" type="file" multiple @change="onFiles" />
+        <input ref="folderInput" class="hidden-input" type="file" multiple webkitdirectory @change="onFiles" />
+      </div>
     </section>
 
-    <p v-if="meta.notice" class="notice">{{ meta.notice }}</p>
-    <div v-if="error" class="alert"><span>{{ error }}</span><button type="button" @click="error = ''">×</button></div>
-    <Breadcrumbs :path="listing.path" :root-label="t('root')" :back-label="t('back')" :search-label="globalEntries ? `${t('searchResults')} “${query}”` : ''" @navigate="navigate" />
-    <p v-if="searchTruncated" class="search-warning">{{ t('tooMany') }}</p>
-    <FileList :entries="displayedEntries" :language="language" :loading="loading" :sort-key="sortKey" :sort-direction="sortDirection" @navigate="navigate" @action="openAction" @sort="changeSort" />
+    <!-- 4. 文件列表卡片 (Table Card) -->
+    <FileList
+      :entries="displayedEntries"
+      :language="language"
+      :loading="loading"
+      :sort-key="sortKey"
+      :sort-direction="sortDirection"
+      @navigate="navigate"
+      @action="openAction"
+      @sort="changeSort"
+    />
 
+    <!-- 5. 底部信息与右下角语言切换 (Page Footer) -->
     <footer class="page-footer">
-      <p>v{{ meta.version }}</p>
+      <p>MDFS · v{{ meta.version }}</p>
+
+      <!-- 语言选择 (移动到右下角) -->
       <div class="language-picker">
-        <button type="button" @click="languageMenuOpen = !languageMenuOpen">{{ t('languageName') }}⌃</button>
-        <div v-if="languageMenuOpen" class="dropdown language-dropdown">
-          <button v-for="item in languages" :key="item" type="button" @click="setLanguage(item)">{{ translate(item, 'languageName') }}</button>
+        <button type="button" class="language-btn" @click.stop="languageMenuOpen = !languageMenuOpen">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <span>{{ t('languageName') }}</span>
+          <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15" /></svg>
+        </button>
+        <div v-if="languageMenuOpen" class="dropdown language-dropdown-up">
+          <button v-for="item in languages" :key="item" type="button" :class="{ active: language === item }" @click="setLanguage(item)">
+            {{ translate(item, 'languageName') }}
+          </button>
         </div>
       </div>
     </footer>
 
+    <!-- 模态框区 -->
     <AppModal v-if="dialog === 'login'" :title="t('login')" @close="closeDialog">
       <form class="form-stack" @submit.prevent="submitLogin">
         <label>{{ t('username') }}<input v-model="username" autofocus autocomplete="username" /></label>
@@ -321,37 +533,64 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
 
     <AppModal v-if="dialog === 'logout'" :title="t('logout')" @close="closeDialog">
       <p>{{ t('logout') }} {{ session.user }}?</p>
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button><button type="button" class="btn danger" @click="submitLogout">{{ t('confirm') }}</button></template>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button>
+        <button type="button" class="btn danger" @click="submitLogout">{{ t('confirm') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'folder'" :title="t('newFolder')" @close="closeDialog">
       <form class="form-stack" @submit.prevent="submitFolder"><input v-model="folderName" autofocus /></form>
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button><button type="button" class="btn primary" @click="submitFolder">{{ t('create') }}</button></template>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button>
+        <button type="button" class="btn primary" @click="submitFolder">{{ t('create') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'newText'" :title="t('newText')" wide @close="closeDialog">
-      <div class="form-stack"><label>{{ t('title') }}<input v-model="textTitle" autofocus /></label><label>{{ t('content') }}<textarea v-model="textContent" rows="14" /></label></div>
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button><button type="button" class="btn primary" @click="submitText">{{ t('create') }}</button></template>
+      <div class="form-stack">
+        <label>{{ t('title') }}<input v-model="textTitle" autofocus /></label>
+        <label>{{ t('content') }}<textarea v-model="textContent" rows="14" /></label>
+      </div>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button>
+        <button type="button" class="btn primary" @click="submitText">{{ t('create') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'rename' && selected" :title="t('rename')" @close="closeDialog">
-      <div class="form-stack"><label>{{ t('oldName') }}<input :value="selected.name" readonly /></label><label>{{ t('newName') }}<input v-model="newName" autofocus /></label></div>
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button><button type="button" class="btn primary" @click="submitRename">{{ t('rename') }}</button></template>
+      <div class="form-stack">
+        <label>{{ t('oldName') }}<input :value="selected.name" readonly /></label>
+        <label>{{ t('newName') }}<input v-model="newName" autofocus /></label>
+      </div>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button>
+        <button type="button" class="btn primary" @click="submitRename">{{ t('rename') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'delete' && selected" :title="t('remove')" @close="closeDialog">
       <p>{{ t('deleteQuestion') }} “{{ selected.name }}”?</p>
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button><button type="button" class="btn danger" @click="submitDelete">{{ t('remove') }}</button></template>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('cancel') }}</button>
+        <button type="button" class="btn danger" @click="submitDelete">{{ t('remove') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'edit' && selected" :title="`${t('edit')} · ${selected.name}`" wide @close="closeDialog">
       <textarea v-model="textContent" class="editor" rows="20" />
-      <template #footer><button type="button" class="btn default" @click="closeDialog">{{ t('close') }}</button><button type="button" class="btn primary" @click="saveEditor">{{ t('save') }}</button></template>
+      <template #footer>
+        <button type="button" class="btn default" @click="closeDialog">{{ t('close') }}</button>
+        <button type="button" class="btn primary" @click="saveEditor">{{ t('save') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'qr' && selected" @close="closeDialog">
       <div class="qr-content"><QrcodeVue :value="qrLink" :size="268" level="L" /><p class="qr-url">{{ qrLink }}</p></div>
-      <template #footer><button type="button" class="btn info" @click="copyLink">{{ copied ? t('copied') : t('copyLink') }}</button><button type="button" class="btn primary" @click="closeDialog">{{ t('close') }}</button></template>
+      <template #footer>
+        <button type="button" class="btn info" @click="copyLink">{{ copied ? t('copied') : t('copyLink') }}</button>
+        <button type="button" class="btn primary" @click="closeDialog">{{ t('close') }}</button>
+      </template>
     </AppModal>
 
     <AppModal v-if="dialog === 'upload'" :title="t('uploadProgress')" @close="closeDialog">
@@ -360,3 +599,4 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
     </AppModal>
   </main>
 </template>
+

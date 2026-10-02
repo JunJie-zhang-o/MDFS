@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#f2f2ec" stroke="#bbb" d="M12 4h27l13 13v43H12z"/><path fill="#d8d8d2" d="M39 4v14h13z"/><path fill="#aaa" d="M19 25h26v3H19zm0 7h26v3H19zm0 7h26v3H19zm0 7h20v3H19z"/><path fill="#6e8888" d="M15 50h34v9H15z"/><text x="24" y="57" fill="#fff" font-family="sans-serif" font-size="8">TXT</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path fill="#93c5fd" d="M4 3a2 2 0 0 1 2-2h8.586a2 2 0 0 1 1.414.586l4.414 4.414A2 2 0 0 1 21 7.414V21a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V3z"/>
+  <path fill="#eff6ff" d="M5.5 3a.5.5 0 0 1 .5-.5h8v4a1 1 0 0 0 1 1h4v13.5a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5V3z"/>
+  <path fill="#3b82f6" d="M14 1.5v4.5a1 1 0 0 0 1 1h4.5L14 1.5z"/>
+  <path fill="#3b82f6" d="M8 11h8a1 1 0 0 1 0 2H8a1 1 0 0 1 0-2zm0 3.5h8a1 1 0 0 1 0 2H8a1 1 0 0 1 0-2zm0 3.5h5a1 1 0 0 1 0 2H8a1 1 0 0 1 0-2z"/>
+</svg>

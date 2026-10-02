@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#f4f1ed" stroke="#bbb" d="M12 4h27l13 13v43H12z"/><path fill="#ddd" d="M39 4v14h13z"/><path fill="#c44" d="M12 43h40v13H12z"/><text x="22" y="53" fill="#fff" font-family="sans-serif" font-weight="700" font-size="12">PDF</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path fill="#fca5a5" d="M4 3a2 2 0 0 1 2-2h8.586a2 2 0 0 1 1.414.586l4.414 4.414A2 2 0 0 1 21 7.414V21a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V3z"/>
+  <path fill="#fef2f2" d="M5.5 3a.5.5 0 0 1 .5-.5h8v4a1 1 0 0 0 1 1h4v13.5a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5V3z"/>
+  <path fill="#ef4444" d="M14 1.5v4.5a1 1 0 0 0 1 1h4.5L14 1.5z"/>
+  <rect x="5.5" y="12" width="13" height="7" rx="1.5" fill="#ef4444"/>
+  <text x="12" y="17" fill="#ffffff" font-size="5" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">PDF</text>
+</svg>

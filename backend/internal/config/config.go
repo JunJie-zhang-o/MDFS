@@ -83,10 +83,11 @@ type UI struct {
 }
 
 type Features struct {
-	MaxUploadBytes            int64 `toml:"max_upload_bytes"`
-	MaxSearchResults          int   `toml:"max_search_results"`
-	LeafDirectoryDownloadOnly bool  `toml:"leaf_directory_download_only"`
-	ImagePreview              *bool `toml:"image_preview"`
+	MaxUploadBytes            int64    `toml:"max_upload_bytes"`
+	MaxSearchResults          int      `toml:"max_search_results"`
+	LeafDirectoryDownloadOnly bool     `toml:"leaf_directory_download_only"`
+	ImagePreview              *bool    `toml:"image_preview"`
+	ReadmeFiles               []string `toml:"readme_files"`
 }
 
 type Logging struct {
@@ -139,6 +140,9 @@ func (c *Config) applyDefaults() {
 	if c.Features.ImagePreview == nil {
 		enabled := true
 		c.Features.ImagePreview = &enabled
+	}
+	if len(c.Features.ReadmeFiles) == 0 {
+		c.Features.ReadmeFiles = []string{"README.md", "readme.md", "index.md"}
 	}
 	for i := range c.Shares {
 		if c.Shares[i].Name == "" {

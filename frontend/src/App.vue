@@ -8,9 +8,26 @@ import {
 import AppModal from './components/AppModal.vue'
 import Breadcrumbs from './components/Breadcrumbs.vue'
 import FileList from './components/FileList.vue'
+import MarkdownViewer from './components/MarkdownViewer.vue'
 import { languages, translate, type MessageKey } from './i18n'
 import type { DirectoryListing, FileEntry, Language, MetaInfo, SessionInfo } from './types/files'
 import type { FileAction, SortKey } from './utils/files'
+
+function getStorage(key: string): string | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null
+  } catch {
+    return null
+  }
+}
+
+function setStorage(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value)
+  } catch {
+    // ignore storage error
+  }
+}
 
 type Dialog = null | 'login' | 'logout' | 'folder' | 'newText' | 'rename' | 'delete' | 'edit' | 'qr' | 'upload'
 
@@ -18,10 +35,12 @@ const emptyPermissions = { read: false, write: false, delete: false }
 const meta = ref<MetaInfo>({ title: 'MDFS', version: 'dev', notice: '', defaultLanguage: 'zh-CN', publicURL: '', features: { webdav: true, imagePreview: true, directoryUpload: true } })
 const session = ref<SessionInfo>({ authenticated: false, user: '', permissions: emptyPermissions })
 const listing = ref<DirectoryListing>({ path: '/', virtualRoot: false, permissions: emptyPermissions, entries: [] })
-const language = ref<Language>((localStorage.getItem('mdfs-language') as Language | null) ?? 'zh-CN')
-const searchMode = ref<'local' | 'global'>(localStorage.getItem('mdfs-search-mode') === 'global' ? 'global' : 'local')
+const language = ref<Language>((getStorage('mdfs-language') as Language | null) ?? 'zh-CN')
+const searchMode = ref<'local' | 'global'>(getStorage('mdfs-search-mode') === 'global' ? 'global' : 'local')
 const query = ref('')
 const globalEntries = ref<FileEntry[] | null>(null)
+const readmeFileName = ref('')
+const readmeContent = ref('')
 const searchTruncated = ref(false)
 const searchMenuOpen = ref(false)
 const languageMenuOpen = ref(false)
@@ -99,14 +118,48 @@ function joinPath(parent: string, name: string): string {
   return `${parent === '/' ? '' : parent}/${name}`
 }
 
+async function loadReadme() {
+  readmeFileName.value = ''
+  readmeContent.value = ''
+  if (listing.value.virtualRoot || !listing.value.permissions.read) {
+    return
+  }
+  const candidateNames = meta.value.features?.readmeFiles?.length
+    ? meta.value.features.readmeFiles
+    : ['README.md', 'readme.md', 'index.md']
+
+  let matchedEntry: FileEntry | undefined
+  for (const candidate of candidateNames) {
+    const target = candidate.toLowerCase()
+    matchedEntry = listing.value.entries.find(
+      (entry) => entry.kind === 'file' && entry.name.toLowerCase() === target,
+    )
+    if (matchedEntry) break
+  }
+
+  if (matchedEntry && matchedEntry.permissions.read) {
+    try {
+      const content = await readText(matchedEntry.path)
+      readmeFileName.value = matchedEntry.name
+      readmeContent.value = content
+    } catch {
+      readmeFileName.value = ''
+      readmeContent.value = ''
+    }
+  }
+}
+
 async function load(path = hashPath()) {
   loading.value = true
   error.value = ''
   globalEntries.value = null
   searchTruncated.value = false
+  readmeFileName.value = ''
+  readmeContent.value = ''
   try {
     listing.value = await listFiles(path)
     session.value = await getSession(listing.value.path)
+    await loadReadme()
   } catch (reason) {
     showError(reason)
   } finally {
@@ -139,7 +192,7 @@ async function runGlobalSearch() {
 
 function setSearchMode(mode: 'local' | 'global') {
   searchMode.value = mode
-  localStorage.setItem('mdfs-search-mode', mode)
+  setStorage('mdfs-search-mode', mode)
   searchMenuOpen.value = false
   globalEntries.value = null
   if (mode === 'global' && query.value) void runGlobalSearch()
@@ -147,7 +200,7 @@ function setSearchMode(mode: 'local' | 'global') {
 
 function setLanguage(value: Language) {
   language.value = value
-  localStorage.setItem('mdfs-language', value)
+  setStorage('mdfs-language', value)
   languageMenuOpen.value = false
   document.documentElement.lang = value
 }
@@ -293,7 +346,7 @@ onMounted(async () => {
   try {
     meta.value = await getMeta()
     document.title = meta.value.title
-    if (!localStorage.getItem('mdfs-language')) setLanguage(meta.value.defaultLanguage)
+    if (!getStorage('mdfs-language')) setLanguage(meta.value.defaultLanguage)
   } catch (reason) { showError(reason) }
   if (!window.location.hash) window.location.hash = '#/'
   else await load()
@@ -497,6 +550,14 @@ onUnmounted(() => {
       @navigate="navigate"
       @action="openAction"
       @sort="changeSort"
+    />
+
+    <!-- 4.5 Markdown 预览卡片 (类似 GitHub 渲染) -->
+    <MarkdownViewer
+      v-if="readmeContent && !globalEntries"
+      :content="readmeContent"
+      :file-name="readmeFileName"
+      :current-path="listing.path"
     />
 
     <!-- 5. 底部信息与右下角语言切换 (Page Footer) -->

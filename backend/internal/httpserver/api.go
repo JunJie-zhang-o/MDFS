@@ -31,10 +31,19 @@ type apiListing struct {
 }
 
 func (s *Server) meta(w http.ResponseWriter, _ *http.Request) {
+	readmeFiles := s.config.Features.ReadmeFiles
+	if len(readmeFiles) == 0 {
+		readmeFiles = []string{"README.md", "readme.md", "index.md"}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"title": s.config.UI.Title, "version": s.version, "notice": s.config.UI.Notice,
 		"defaultLanguage": s.config.UI.DefaultLanguage, "publicURL": s.config.Server.PublicURL,
-		"features": map[string]any{"webdav": *s.config.WebDAV.Enabled, "imagePreview": *s.config.Features.ImagePreview, "directoryUpload": true},
+		"features": map[string]any{
+			"webdav":          *s.config.WebDAV.Enabled,
+			"imagePreview":    *s.config.Features.ImagePreview,
+			"directoryUpload": true,
+			"readmeFiles":     readmeFiles,
+		},
 	})
 }
 

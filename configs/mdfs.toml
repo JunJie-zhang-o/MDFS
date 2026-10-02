@@ -33,6 +33,7 @@ max_upload_bytes = 1000000000000
 max_search_results = 1000
 leaf_directory_download_only = false
 image_preview = true
+readme_files = ["README.md", "readme.md", "index.md"]
 
 [logging]
 directory = ""

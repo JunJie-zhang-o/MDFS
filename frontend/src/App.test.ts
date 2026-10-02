@@ -62,6 +62,13 @@ vi.stubGlobal('fetch', vi.fn((url: string) => {
       }),
     })
   }
+  if (url.includes('/api/v1/content')) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('# MDFS Readme\nWelcome to MDFS!'),
+    })
+  }
   return Promise.resolve({
     ok: true,
     status: 200,
@@ -126,6 +133,55 @@ describe('App.vue', () => {
     // Click time -> modifiedAt asc (welcome.txt 10:00 first, test-folder 11:00 second)
     await wrapper.find('.time-col').trigger('click')
     expect(getNames()).toEqual(['welcome.txt', 'test-folder'])
+  })
+
+  it('renders markdown card when directory contains README.md', async () => {
+    // Override fetch to include README.md in listing
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/v1/files')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            path: '/with-readme',
+            virtualRoot: false,
+            permissions: { read: true, write: true, delete: true },
+            entries: [
+              {
+                name: 'README.md',
+                path: '/with-readme/README.md',
+                kind: 'file',
+                size: 120,
+                modifiedAt: '2026-09-25T12:00:00Z',
+                hasChildren: false,
+                previewKind: 'text',
+                permissions: { read: true, write: true, delete: true },
+              },
+            ],
+          }),
+        }) as any
+      }
+      if (url.includes('/api/v1/content')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve('# MDFS Readme\nWelcome to MDFS!'),
+        }) as any
+      }
+      return originalFetch(input)
+    }))
+
+    const wrapper = mount(App)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(wrapper.find('.markdown-card').exists()).toBe(true)
+    expect(wrapper.find('.markdown-header-title').text()).toBe('README.md')
+    expect(wrapper.find('.markdown-body').text()).toContain('MDFS Readme')
+    expect(wrapper.find('.markdown-body').text()).toContain('Welcome to MDFS!')
+
+    vi.stubGlobal('fetch', originalFetch)
   })
 })
 

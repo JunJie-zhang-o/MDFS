@@ -28,6 +28,7 @@ default_language = "zh-CN"
 max_upload_bytes = 1000000000000
 max_search_results = 1000
 image_preview = true
+readme_files = ["README.md", "readme.md", "index.md"]
 
 [logging]
 directory = ""

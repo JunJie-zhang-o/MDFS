@@ -37,7 +37,7 @@ export interface MetaInfo {
   notice: string
   defaultLanguage: Language
   publicURL: string
-  features: { webdav: boolean; imagePreview: boolean; directoryUpload: boolean }
+  features: { webdav: boolean; imagePreview: boolean; directoryUpload: boolean; readmeFiles?: string[] }
 }
 
 export interface SearchResult {
